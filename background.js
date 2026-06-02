@@ -1,57 +1,24 @@
 console.log("=== AI Mail Sorter loaded ===");
 
 // ==========================================
-// DIAGNOSTICKÝ DUMP
+// DIAGNOSTICKÝ DUMP (zkrácený)
 // ==========================================
 async function runDiagnosticDump() {
   console.log("=== START DIAGNOSTICKÉHO DUMPU ===");
-  console.log("[Dump] Dostupnost Thunderbird API:", {
-    browser_accounts: typeof browser.accounts !== "undefined",
-    browser_folders: typeof browser.folders !== "undefined",
-    browser_messages: typeof browser.messages !== "undefined",
-    browser_messageTags: typeof browser.messagesTags !== "undefined",
-    browser_storage: typeof browser.storage !== "undefined",
-    browser_notifications: typeof browser.notifications !== "undefined",
-  });
-
   try {
     const accounts = await browser.accounts.list();
     console.log(`[Dump] Nalezeno účtů: ${accounts.length}`);
-
     for (let account of accounts) {
-      console.log(
-        `\n[ÚČET] ID: "${account.id}" | Název: "${account.name}" | Typ: "${account.type}"`,
-      );
       const allFolders = await browser.folders.query({ accountId: account.id });
-      console.log(`  -> Počet složek: ${allFolders.length}`);
-      for (let folder of allFolders) {
-        console.log(
-          `     Složka: name="${folder.name}", path="${folder.path}", id="${folder.id}", type="${folder.type}"`,
-        );
-      }
-      let rootCandidate = allFolders.find(
-        (f) => f.path === "" || f.name === "Root",
+      console.log(
+        `[ÚČET] ${account.name} (${account.id}) - složek: ${allFolders.length}`,
       );
-      if (rootCandidate) {
-        console.log(
-          `  -> Kandidát na kořen: ${rootCandidate.name} (id: ${rootCandidate.id})`,
-        );
-        const fullRoot = await browser.folders.get(rootCandidate.id);
-        console.log(
-          `  -> Plnohodnotný kořen: name="${fullRoot.name}", path="${fullRoot.path}", id="${fullRoot.id}"`,
-        );
-      } else {
-        console.log(
-          `  -> Žádný zjevný kořen, použijeme první složku: ${allFolders[0]?.name}`,
-        );
-      }
     }
   } catch (err) {
     console.error("[Dump - Chyba]", err);
   }
-  console.log("\n=== KONEC DIAGNOSTICKÉHO DUMPU ===");
+  console.log("=== KONEC DIAGNOSTICKÉHO DUMPU ===");
 }
-
 runDiagnosticDump();
 
 // ==========================================
@@ -123,25 +90,12 @@ function showErrorNotification(title, detail) {
   });
 }
 
-// ==========================================
-// PRÁCE SE SLOŽKAMI
-// ==========================================
-
 async function getAccountRootFolder(accountId) {
   const allFolders = await browser.folders.query({ accountId: accountId });
-  if (!allFolders || allFolders.length === 0) {
-    console.error(`[Chyba] Žádné složky pro účet ${accountId}`);
-    return null;
-  }
+  if (!allFolders || allFolders.length === 0) return null;
   let rootFolder = allFolders.find((f) => f.path === "" || f.name === "Root");
-  if (!rootFolder) {
-    rootFolder = allFolders[0];
-    console.warn(
-      `[Varování] Nenalezen standardní kořen, používám první složku: ${rootFolder.name}`,
-    );
-  }
-  const fullFolder = await browser.folders.get(rootFolder.id);
-  return fullFolder;
+  if (!rootFolder) rootFolder = allFolders[0];
+  return await browser.folders.get(rootFolder.id);
 }
 
 async function findOrCreateAiFolder(accountId, targetCategory) {
@@ -153,37 +107,28 @@ async function findOrCreateAiFolder(accountId, targetCategory) {
         targetCategory.slice(1);
 
   const rootFolder = await getAccountRootFolder(accountId);
-  if (!rootFolder) {
-    console.error(
-      `[Chyba] Nelze získat kořenovou složku pro účet ${accountId}`,
-    );
-    return null;
-  }
+  if (!rootFolder) return null;
 
   try {
     const subFolders = await browser.folders.getSubFolders(rootFolder.id);
     let existing = subFolders.find(
       (f) => f.name.toLowerCase() === targetName.toLowerCase(),
     );
-    if (existing) {
-      console.log(`[Info] Složka již existuje: ${existing.path}`);
-      return existing;
-    }
+    if (existing) return existing;
 
-    console.log(
-      `[Info] Vytvářím složku ${targetName} v kořeni účtu (${rootFolder.path || "/"})`,
-    );
+    console.log(`[Info] Vytvářím složku ${targetName}`);
     const newFolder = await browser.folders.create(rootFolder.id, targetName);
     await new Promise((r) => setTimeout(r, 500));
     const updatedSubFolders = await browser.folders.getSubFolders(
       rootFolder.id,
     );
-    const created = updatedSubFolders.find(
-      (f) => f.name.toLowerCase() === targetName.toLowerCase(),
+    return (
+      updatedSubFolders.find(
+        (f) => f.name.toLowerCase() === targetName.toLowerCase(),
+      ) || newFolder
     );
-    return created || newFolder;
   } catch (err) {
-    console.error("[Chyba] Problém při hledání/vytváření složky:", err);
+    console.error("[Chyba] Problém se složkou:", err);
     return null;
   }
 }
@@ -224,16 +169,59 @@ async function processMessage(message) {
 
     if (!response.ok) throw new Error(`Server vrátil kód ${response.status}`);
     const data = await response.json();
-    const rawContent = data.choices[0]?.message?.content || "";
-    let category = rawContent
-      .trim()
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]/g, "");
+    const messageObj = data.choices[0]?.message || {};
+    let rawContent = messageObj.content || "";
+    let reasoning = messageObj.reasoning_content || "";
 
-    console.log(`[Vyhodnoceno] Čistá kategorie od AI: "${category}"`);
-    if (!category) return;
+    console.log(`[Debug] Content: "${rawContent}"`);
+    if (reasoning)
+      console.log(
+        `[Debug] Reasoning začátek: "${reasoning.substring(0, 150)}..."`,
+      );
+
+    let category = "";
+
+    // Pokud je content prázdný, zkusíme extrahovat z reasoning
+    if (!rawContent.trim() && reasoning) {
+      const lowerReasoning = reasoning.toLowerCase();
+      const keywords = [
+        "invoice",
+        "work",
+        "newsletter",
+        "spam",
+        "automated",
+        "ad",
+        "other",
+      ];
+      for (let kw of keywords) {
+        if (lowerReasoning.includes(kw)) {
+          category = kw;
+          console.log(
+            `[Info] Kategorie extrahována z reasoning: "${category}"`,
+          );
+          break;
+        }
+      }
+    }
+
+    // Pokud stále nemáme kategorii, použijeme rawContent (původní metoda)
+    if (!category && rawContent) {
+      category = rawContent
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]/g, "");
+    }
+
+    if (!category) {
+      console.warn(
+        `[Varování] Nepodařilo se získat kategorii, používám "other"`,
+      );
+      category = "other";
+    }
+
+    console.log(`[Vyhodnoceno] Kategorie: "${category}"`);
 
     const spamKeywords = [
       "spam",
@@ -246,13 +234,9 @@ async function processMessage(message) {
     ];
     let targetCategory = spamKeywords.includes(category) ? "spam" : category;
 
-    let accountId = null;
-    if (message.folder && message.folder.accountId) {
-      accountId = message.folder.accountId;
-    } else {
-      const fullMsg = await browser.messages.get(message.id);
-      accountId = fullMsg.folder?.accountId;
-    }
+    let accountId =
+      message.folder?.accountId ||
+      (await browser.messages.get(message.id)).folder?.accountId;
     if (!accountId) {
       console.error("[Chyba] Nelze určit účet, používám fallback");
       await applyFallback(message, targetCategory);
@@ -262,25 +246,14 @@ async function processMessage(message) {
     let targetFolder = await findOrCreateAiFolder(accountId, targetCategory);
     if (targetFolder) {
       try {
-        console.log(
-          `[Akce] Přesouvám do: ${targetFolder.path} (ID: ${targetFolder.id})`,
-        );
-        // ZDE JE OPRAVA: použijeme targetFolder.id místo celého objektu
+        console.log(`[Akce] Přesouvám do: ${targetFolder.path}`);
         await browser.messages.move([message.id], targetFolder.id);
         console.log(`[Success] Zpráva přesunuta.`);
       } catch (moveError) {
         console.error("[Error] Přesun selhal:", moveError);
-        // Zkusíme ještě alternativní způsob: použít cílovou složku jako objekt (kdyby náhodou)
-        try {
-          await browser.messages.move([message.id], targetFolder);
-          console.log(`[Success] Zpráva přesunuta (objektem).`);
-        } catch (err2) {
-          console.error("[Error] Selhal i druhý pokus o přesun:", err2);
-          await applyFallback(message, targetCategory);
-        }
+        await applyFallback(message, targetCategory);
       }
     } else {
-      console.warn(`[Fallback] Složku se nepodařilo získat/vytvořit.`);
       await applyFallback(message, targetCategory);
     }
   } catch (error) {
@@ -289,19 +262,15 @@ async function processMessage(message) {
       error.message.includes("NetworkError") ||
       error.message.includes("Failed to fetch")
     ) {
-      showErrorNotification(
-        "Chyba spojení",
-        "Zkontrolujte, zda běží LM Studio a má zapnuté CORS.",
-      );
+      showErrorNotification("Chyba spojení", "Zkontrolujte LM Studio a CORS.");
     }
   }
 }
 
 async function applyFallback(message, targetCategory) {
   if (targetCategory === "spam") {
-    console.log(`[Akce] Označuji jako SPAM (Junk)...`);
+    console.log(`[Akce] Označuji jako SPAM...`);
     await browser.messages.update(message.id, { junk: true });
-    console.log(`[Success] Zpráva označena jako spam.`);
   } else {
     console.log(`[Akce] Přiřazuji štítek "${targetCategory}"...`);
     let tagKey = await ensureTagExists(targetCategory);
@@ -309,27 +278,20 @@ async function applyFallback(message, targetCategory) {
     if (!currentTags.includes(tagKey)) {
       currentTags.push(tagKey);
       await browser.messages.update(message.id, { tags: currentTags });
-      console.log(`[Success] Štítek přiřazen.`);
-    } else {
-      console.log(`[Info] Zpráva už tento štítek má.`);
     }
   }
 }
 
 // Spouštěče
 browser.messages.onNewMailReceived.addListener(async (folder, messages) => {
-  for (let message of messages) {
-    await processMessage(message);
-  }
+  for (let message of messages) await processMessage(message);
 });
 
 browser.messageDisplay.onMessagesDisplayed.addListener(
   async (tab, messages) => {
     const messageList = messages.messages || messages;
     if (messageList) {
-      for (let message of messageList) {
-        await processMessage(message);
-      }
+      for (let message of messageList) await processMessage(message);
     }
   },
 );
