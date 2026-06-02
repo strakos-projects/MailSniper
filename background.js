@@ -218,7 +218,7 @@ async function processMessage(message) {
         model: settings.modelName,
         messages: [{ role: "user", content: prompt }],
         temperature: 0.1,
-        max_tokens: 15,
+        max_tokens: 100,
       }),
     });
 
