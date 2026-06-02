@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>AI Mail Sorter Settings</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 20px;
+        max-width: 600px;
+      }
+      label {
+        display: block;
+        margin-top: 15px;
+        font-weight: bold;
+      }
+      input,
+      textarea {
+        width: 100%;
+        padding: 8px;
+        margin-top: 5px;
+        box-sizing: border-box;
+      }
+      textarea {
+        height: 100px;
+        resize: vertical;
+      }
+      button {
+        margin-top: 20px;
+        padding: 10px 15px;
+        background: #0078d7;
+        color: white;
+        border: none;
+        cursor: pointer;
+        border-radius: 4px;
+        font-weight: bold;
+      }
+      button:hover {
+        background: #005a9e;
+      }
+      #status {
+        margin-top: 15px;
+        color: green;
+        font-weight: bold;
+      }
+      .help-text {
+        font-size: 0.85em;
+        color: #555;
+        margin-top: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>AI Mail Sorter Settings</h2>
+
+    <label for="apiUrl">LM Studio API URL:</label>
+    <input
+      type="text"
+      id="apiUrl"
+      placeholder="http://127.0.0.1:1234/v1/chat/completions"
+    />
+
+    <label for="modelName">Model Name (LM Studio):</label>
+    <input type="text" id="modelName" placeholder="google/gemma-4-e4b" />
+
+    <label for="systemPrompt">AI System Prompt:</label>
+    <textarea id="systemPrompt"></textarea>
+    <div class="help-text">
+      Use <code>{SUBJECT}</code> as a placeholder for the email subject.
+      Instruct the AI on which categories to use (e.g., Invoice, Spam,
+      Automated, Ad, Work, Other) and explicitly state it should return ONLY ONE
+      WORD.
+    </div>
+
+    <button id="saveBtn">Save Settings</button>
+    <div id="status"></div>
+
+    <script src="options.js"></script>
+  </body>
+</html>

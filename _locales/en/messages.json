@@ -1,0 +1,14 @@
+{
+  "extensionName": { "message": "Local AI Mail Sorter" },
+  "extensionDescription": {
+    "message": "Automatic email sorting and spam moving using LM Studio and local LLM."
+  },
+  "optionsTitle": { "message": "AI Mail Sorter Settings" },
+  "optionsSaveBtn": { "message": "Save Settings" },
+  "optionsSaved": { "message": "Settings saved successfully!" },
+  "errorTitle": { "message": "AI Mail Sorter Error" },
+  "errConnection": {
+    "message": "Cannot connect to the LLM server. Is LM Studio running? Is CORS enabled?"
+  },
+  "errGeneral": { "message": "An unexpected error occurred." }
+}

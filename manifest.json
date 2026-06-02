@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_extensionName__",
+  "version": "1.4",
+  "description": "__MSG_extensionDescription__",
+  "default_locale": "en",
+  "permissions": [
+    "messagesRead",
+    "messagesUpdate",
+    "messagesMove",
+    "accountsRead",
+    "accountsFolders",
+    "storage",
+    "notifications"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "mail-sniper@localhost",
+      "strict_min_version": "128.0"
+    }
+  }
+}

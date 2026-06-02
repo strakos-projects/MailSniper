@@ -1,0 +1,14 @@
+{
+  "extensionName": { "message": "Lokální AI Třídič Pošty" },
+  "extensionDescription": {
+    "message": "Automatické třídění a odstraňování spamu přes LM Studio a lokální LLM."
+  },
+  "optionsTitle": { "message": "Nastavení AI Mail Sorteru" },
+  "optionsSaveBtn": { "message": "Uložit nastavení" },
+  "optionsSaved": { "message": "Nastavení bylo uloženo!" },
+  "errorTitle": { "message": "Chyba AI Třídiče Pošty" },
+  "errConnection": {
+    "message": "Nelze se připojit k LLM serveru. Běží LM Studio? Je zapnuté CORS?"
+  },
+  "errGeneral": { "message": "Došlo k neočekávané chybě." }
+}
